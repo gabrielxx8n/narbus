@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Narbus — Control de Flota</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+*{font-family:'Inter',sans-serif;box-sizing:border-box;}
+html,body{margin:0;padding:0;background:#03091a;color:white;}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:#0a1628;}
+::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:4px;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes pulse-red{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{box-shadow:0 0 0 6px rgba(239,68,68,0)}}
+@keyframes toast-in{from{opacity:0;transform:translateX(100%)}to{opacity:1;transform:translateX(0)}}
+@keyframes toast-out{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(100%)}}
+.fade-in{animation:fadeIn .4s ease forwards;}
+.slide-up{animation:slideUp .45s cubic-bezier(.16,1,.3,1) forwards;}
+.float{animation:float 3s ease-in-out infinite;}
+.alerta-pulse{animation:pulse-red 1.8s ease-in-out infinite;}
+.card{background:rgba(15,23,42,.9);border:1px solid rgba(148,163,184,.08);backdrop-filter:blur(20px);transition:border-color .2s;}
+.card:hover{border-color:rgba(148,163,184,.18);}
+.card-clickable{cursor:pointer;transition:border-color .2s,transform .15s,box-shadow .15s;}
+.card-clickable:hover{border-color:rgba(37,99,235,.4)!important;transform:translateY(-2px);box-shadow:0 8px 24px rgba(37,99,235,.14);}
+.glass{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);}
+.badge-rojo{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);color:#fca5a5;}
+.badge-verde{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.35);color:#6ee7b7;}
+.badge-azul{background:rgba(34,211,238,.12);border:1px solid rgba(34,211,238,.35);color:#67e8f9;}
+.row-rojo{border-left:3px solid #ef4444;background:rgba(239,68,68,.04);}
+.row-verde{border-left:3px solid #10b981;background:rgba(16,185,129,.04);}
+.row-azul{border-left:3px solid #22d3ee;background:rgba(34,211,238,.04);}
+.nav-active{background:linear-gradient(135deg,rgba(37,99,235,.25),rgba(6,182,212,.15));border:1px solid rgba(37,99,235,.45);color:#93c5fd !important;}
+.inp{width:100%;padding:.65rem .9rem;border-radius:.7rem;background:rgba(10,22,48,.85);border:1.5px solid #1e3a5f;color:white;font-size:.85rem;transition:all .2s;}
+.inp:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.12);}
+.inp option{background:#0a1628;}
+select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .75rem center;padding-right:2rem;}
+.btn-grad{background:linear-gradient(135deg,#2563eb,#0891b2);border:none;cursor:pointer;color:white;font-weight:700;transition:opacity .2s,transform .15s;}
+.btn-grad:hover{opacity:.9;transform:translateY(-1px);}
+.btn-green{background:linear-gradient(135deg,#10b981,#059669);border:none;cursor:pointer;color:white;font-weight:700;transition:opacity .2s,transform .15s;}
+.btn-green:hover{opacity:.9;transform:translateY(-1px);}
+.btn-amber{background:linear-gradient(135deg,#f59e0b,#d97706);border:none;cursor:pointer;color:white;font-weight:700;transition:opacity .2s,transform .15s;}
+.btn-amber:hover{opacity:.9;transform:translateY(-1px);}
+.lbl{display:block;font-size:.7rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.07em;margin-bottom:.35rem;}
+/* RANGE PILLS */
+.rpill{padding:.35rem .85rem;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:transparent;color:#64748b;font-size:.75rem;font-weight:600;cursor:pointer;transition:all .2s;}
+.rpill.active{background:rgba(37,99,235,.2);border-color:rgba(37,99,235,.5);color:#93c5fd;}
+/* LOGIN */
+.login-bg{background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(37,99,235,.4) 0%,transparent 60%),radial-gradient(ellipse 60% 40% at 80% 80%,rgba(6,182,212,.25) 0%,transparent 60%),#03091a;}
+.login-card{background:rgba(6,15,38,.88);border:1px solid rgba(37,99,235,.22);box-shadow:0 0 80px rgba(37,99,235,.12),inset 0 1px 0 rgba(255,255,255,.05);backdrop-filter:blur(32px);}
+.input-login{background:rgba(255,255,255,.04);border:1.5px solid rgba(255,255,255,.08);color:white;border-radius:.875rem;padding:.85rem 1.1rem;width:100%;font-size:.95rem;transition:all .25s;}
+.input-login:focus{outline:none;border-color:rgba(37,99,235,.7);background:rgba(37,99,235,.05);box-shadow:0 0 0 4px rgba(37,99,235,.1);}
+.input-login::placeholder{color:rgba(148,163,184,.45);font-size:.9rem;}
+/* LAYOUT */
+#app{display:none;min-height:100vh;}
+#sidebar{position:fixed;top:0;left:0;bottom:0;width:240px;z-index:40;transform:translateX(-100%);transition:transform .3s cubic-bezier(.16,1,.3,1);background:#04101f;border-right:1px solid rgba(255,255,255,.04);}
+#sidebar.open{transform:translateX(0);}
+#sidebar-overlay{display:none;position:fixed;inset:0;z-index:39;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);}
+#sidebar-overlay.show{display:block;}
+@media(min-width:768px){
+  #sidebar{position:relative;transform:translateX(0)!important;flex-shrink:0;}
+  #sidebar-overlay{display:none!important;}
+  #app{display:flex!important;flex-direction:row;}
+  #menu-btn{display:none!important;}
+}
+@media(max-width:767px){
+  #app{display:block!important;}
+  #main-col{height:100vh;display:flex;flex-direction:column;}
+}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.kpi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:.75rem;}
+@media(min-width:640px){.kpi-grid{grid-template-columns:repeat(3,1fr);}}
+@media(min-width:1024px){.kpi-grid{grid-template-columns:repeat(5,1fr);}}
+.charts-top{display:grid;grid-template-columns:1fr;gap:1rem;}
+@media(min-width:1024px){.charts-top{grid-template-columns:2fr 1fr;}}
+.charts-bot{display:grid;grid-template-columns:1fr;gap:1rem;}
+@media(min-width:768px){.charts-bot{grid-template-columns:1fr 1fr;}}
+.analytics-grid{display:grid;grid-template-columns:1fr;gap:1rem;}
+@media(min-width:768px){.analytics-grid{grid-template-columns:1fr 1fr;}}
+.filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;}
+@media(min-width:768px){.filter-grid{grid-template-columns:repeat(5,1fr);}}
+/* TOAST */
+#toast{position:fixed;bottom:1.5rem;right:1.5rem;z-index:999;display:flex;align-items:center;gap:.75rem;padding:.85rem 1.2rem;border-radius:1rem;font-size:.85rem;font-weight:700;min-width:220px;box-shadow:0 8px 32px rgba(0,0,0,.4);}
+/* MODAL HISTORIAL */
+#modal-hist{display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.88);backdrop-filter:blur(12px);}
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div id="toast" style="display:none"></div>
+
+<!-- LOGIN -->
+<div id="login-screen" class="login-bg fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="absolute top-10 left-10 w-64 h-64 rounded-full opacity-10 blur-3xl pointer-events-none" style="background:radial-gradient(circle,#2563eb,transparent)"></div>
+  <div class="absolute bottom-10 right-10 w-80 h-80 rounded-full opacity-10 blur-3xl pointer-events-none" style="background:radial-gradient(circle,#0891b2,transparent)"></div>
+  <div class="login-card rounded-3xl p-8 w-full max-w-sm relative slide-up">
+    <div class="text-center mb-8">
+      <div class="float inline-block mb-5">
+        <div class="w-20 h-20 rounded-2xl mx-auto flex items-center justify-center" style="background:linear-gradient(135deg,#1d4ed8,#0891b2);box-shadow:0 12px 36px rgba(37,99,235,.5)">
+          <span style="font-size:2.4rem">🚛</span>
+        </div>
+      </div>
+      <h1 class="text-3xl font-black tracking-tight">Narbus</h1>
+      <div class="flex items-center justify-center mt-3 gap-2">
+        <div style="height:1px;width:40px;background:linear-gradient(to right,transparent,rgba(37,99,235,.5))"></div>
+        <div style="width:6px;height:6px;border-radius:50%;background:rgba(37,99,235,.7)"></div>
+        <div style="height:1px;width:40px;background:linear-gradient(to left,transparent,rgba(37,99,235,.5))"></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:.85rem">
+      <input id="inp-user" type="text" placeholder="Usuario" class="input-login" autocomplete="off">
+      <input id="inp-pass" type="password" placeholder="Contraseña" class="input-login">
+      <button onclick="doLogin()" class="btn-grad w-full p-3.5 rounded-2xl" style="font-size:.95rem;margin-top:.25rem">Ingresar →</button>
+      <p id="err-msg" style="display:none;color:#f87171;font-size:.82rem;text-align:center;font-weight:600">⚠️ Usuario o contraseña incorrectos</p>
+    </div>
+    <div style="margin-top:1.5rem;padding-top:.9rem;border-top:1px solid rgba(255,255,255,.05);display:flex;justify-content:space-between;font-size:.7rem;color:#334155">
+      <span>Narbus Fleet v11</span><span>© 2026 Narbus</span>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div id="sidebar-overlay" onclick="closeSidebar()"></div>
+  <aside id="sidebar" style="display:flex;flex-direction:column;height:100vh;">
+    <div style="padding:1.1rem 1.1rem .9rem;border-bottom:1px solid rgba(255,255,255,.04)">
+      <div style="display:flex;align-items:center;gap:.75rem">
+        <div style="width:36px;height:36px;border-radius:.75rem;background:linear-gradient(135deg,#1d4ed8,#0891b2);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0">🚛</div>
+        <div><p style="font-weight:900;font-size:.85rem">Narbus</p><p style="font-size:.7rem;color:#475569">Control de Flota</p></div>
+      </div>
+    </div>
+    <div style="padding:.75rem;border-bottom:1px solid rgba(255,255,255,.04)">
+      <div style="display:flex;align-items:center;gap:.65rem;padding:.65rem;border-radius:.75rem;background:rgba(255,255,255,.03)">
+        <div id="avatar" style="width:32px;height:32px;border-radius:.6rem;background:rgba(37,99,235,.2);display:flex;align-items:center;justify-content:center;color:#93c5fd;font-weight:900;font-size:.8rem;flex-shrink:0">G</div>
+        <div><p id="sidebar-user" style="font-size:.82rem;font-weight:700">Usuario</p><p style="font-size:.7rem;color:#475569">Administrador</p></div>
+      </div>
+    </div>
+    <nav style="flex:1;padding:.6rem;overflow-y:auto;display:flex;flex-direction:column;gap:.15rem">
+      <p style="font-size:.65rem;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:.1em;padding:.6rem .6rem .3rem">Navegación</p>
+      <button onclick="showView('overview');closeSidebar()"  class="nav-btn" style="width:100%;display:flex;align-items:center;gap:.65rem;padding:.6rem .75rem;border-radius:.65rem;border:1px solid transparent;background:transparent;color:#94a3b8;font-size:.82rem;font-weight:500;cursor:pointer;text-align:left;transition:all .2s"><span>📊</span><span>Overview</span></button>
+      <button onclick="showView('registros');closeSidebar()" class="nav-btn" style="width:100%;display:flex;align-items:center;gap:.65rem;padding:.6rem .75rem;border-radius:.65rem;border:1px solid transparent;background:transparent;color:#94a3b8;font-size:.82rem;font-weight:500;cursor:pointer;text-align:left;transition:all .2s"><span>📋</span><span>Registros</span></button>
+      <button onclick="showView('analytics');closeSidebar()" class="nav-btn" style="width:100%;display:flex;align-items:center;gap:.65rem;padding:.6rem .75rem;border-radius:.65rem;border:1px solid transparent;background:transparent;color:#94a3b8;font-size:.82rem;font-weight:500;cursor:pointer;text-align:left;transition:all .2s"><span>📈</span><span>Analytics</span></button>
+      <p style="font-size:.65rem;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:.1em;padding:.6rem .6rem .3rem;margin-top:.5rem">Acciones</p>
+      <button onclick="abrirModal(false);closeSidebar()" style="width:100%;display:flex;align-items:center;gap:.65rem;padding:.6rem .75rem;border-radius:.65rem;border:1px solid rgba(16,185,129,.2);background:rgba(16,185,129,.08);color:#6ee7b7;font-size:.82rem;font-weight:700;cursor:pointer;text-align:left">➕ Nuevo Registro</button>
+      <button onclick="exportarExcel()" style="width:100%;display:flex;align-items:center;gap:.65rem;padding:.6rem .75rem;border-radius:.65rem;border:1px solid rgba(245,158,11,.2);background:rgba(245,158,11,.08);color:#fcd34d;font-size:.82rem;font-weight:700;cursor:pointer;text-align:left;margin-top:.1rem">📥 Exportar Excel</button>
+      <button onclick="loadData()" style="width:100%;display:flex;align-items:center;gap:.65rem;padding:.6rem .75rem;border-radius:.65rem;border:1px solid transparent;background:transparent;color:#94a3b8;font-size:.82rem;font-weight:500;cursor:pointer;text-align:left;transition:all .2s;margin-top:.1rem">🔄 Actualizar</button>
+    </nav>
+    <div style="padding:.6rem;border-top:1px solid rgba(255,255,255,.04)">
+      <button onclick="doLogout()" style="width:100%;display:flex;align-items:center;gap:.65rem;padding:.6rem .75rem;border-radius:.65rem;border:none;background:transparent;color:#64748b;font-size:.82rem;font-weight:500;cursor:pointer;text-align:left">🚪 Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <div id="main-col" style="flex:1;min-width:0;display:flex;flex-direction:column;">
+    <header style="padding:.85rem 1.25rem;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;background:#04101f;border-bottom:1px solid rgba(255,255,255,.04);gap:.75rem">
+      <div style="display:flex;align-items:center;gap:.75rem;min-width:0">
+        <button id="menu-btn" onclick="openSidebar()" style="width:36px;height:36px;border-radius:.65rem;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:white;font-size:1.1rem;cursor:pointer;flex-shrink:0">☰</button>
+        <div style="min-width:0">
+          <h2 id="page-title" style="font-size:1rem;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Overview</h2>
+          <p id="page-sub" style="font-size:.7rem;color:#475569;margin-top:.1rem">Vista general</p>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:.75rem;flex-shrink:0">
+        <button onclick="exportarExcel()" class="btn-amber" style="padding:.4rem .9rem;border-radius:.65rem;font-size:.75rem;display:none" id="export-btn-header">📥 Excel</button>
+        <div style="display:flex;align-items:center;gap:.4rem">
+          <span id="conn-dot" style="width:7px;height:7px;border-radius:50%;background:#facc15;display:inline-block"></span>
+          <span id="conn-txt" style="font-size:.7rem;color:#64748b">Conectando...</span>
+        </div>
+      </div>
+    </header>
+
+    <main style="flex:1;overflow-y:auto;padding:1rem;">
+
+      <!-- ══ OVERVIEW ══ -->
+      <div id="view-overview">
+
+        <!-- ALERTAS -->
+        <div id="alertas-box" style="display:none;margin-bottom:1rem"></div>
+
+        <!-- FILTRO RANGO -->
+        <div class="card" style="padding:.9rem 1rem;border-radius:1rem;margin-bottom:1rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem">
+            <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+              <button class="rpill active" onclick="setRango('7d',this)">7 días</button>
+              <button class="rpill" onclick="setRango('30d',this)">30 días</button>
+              <button class="rpill" onclick="setRango('mes',this)">Este mes</button>
+              <button class="rpill" onclick="setRango('todo',this)">Todo</button>
+              <button class="rpill" onclick="setRango('custom',this)">Personalizado</button>
+            </div>
+            <div id="custom-range" style="display:none;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+              <input type="date" id="rango-desde" class="inp" style="width:auto;padding:.4rem .65rem;font-size:.78rem" onchange="aplicarRango()">
+              <span style="color:#475569;font-size:.8rem">→</span>
+              <input type="date" id="rango-hasta" class="inp" style="width:auto;padding:.4rem .65rem;font-size:.78rem" onchange="aplicarRango()">
+            </div>
+          </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="kpi-grid" style="margin-bottom:1rem">
+          <div class="card fade-in" style="padding:1rem;border-radius:1rem"><p class="lbl" style="margin-bottom:.3rem">Total</p><p id="k-total" style="font-size:1.8rem;font-weight:900">0</p><p style="font-size:.7rem;color:#475569;margin-top:.2rem">registros</p></div>
+          <div class="card fade-in" style="padding:1rem;border-radius:1rem"><p class="lbl" style="margin-bottom:.3rem">Sobreconsumo</p><p id="k-red" style="font-size:1.8rem;font-weight:900;color:#f87171">0</p><p style="font-size:.7rem;color:#7f1d1d;margin-top:.2rem">cargó de más</p></div>
+          <div class="card fade-in" style="padding:1rem;border-radius:1rem"><p class="lbl" style="margin-bottom:.3rem">Normal</p><p id="k-green" style="font-size:1.8rem;font-weight:900;color:#34d399">0</p><p style="font-size:.7rem;color:#064e3b;margin-top:.2rem">en rango</p></div>
+          <div class="card fade-in" style="padding:1rem;border-radius:1rem"><p class="lbl" style="margin-bottom:.3rem">Ahorro</p><p id="k-blue" style="font-size:1.8rem;font-weight:900;color:#22d3ee">0</p><p style="font-size:.7rem;color:#164e63;margin-top:.2rem">cargó de menos</p></div>
+          <div class="card fade-in" style="padding:1rem;border-radius:1rem"><p class="lbl" style="margin-bottom:.3rem">Km Total</p><p id="k-km" style="font-size:1.8rem;font-weight:900">0</p><p style="font-size:.7rem;color:#475569;margin-top:.2rem">kilómetros</p></div>
+        </div>
+
+        <!-- GRÁFICOS -->
+        <div class="charts-top" style="margin-bottom:1rem">
+          <div class="card" style="padding:1.25rem;border-radius:1rem">
+            <h3 style="font-weight:700;font-size:.85rem;margin-bottom:.25rem">Estado por máquina <span style="font-size:.7rem;color:#475569;font-weight:400">— clic para ver historial</span></h3>
+            <p style="font-size:.72rem;color:#475569;margin-bottom:.9rem">Último registro en el período</p>
+            <div style="position:relative;height:180px"><canvas id="chart-daily"></canvas></div>
+          </div>
+          <div class="card" style="padding:1.25rem;border-radius:1rem">
+            <h3 style="font-weight:700;font-size:.85rem;margin-bottom:.25rem">Distribución</h3>
+            <p style="font-size:.72rem;color:#475569;margin-bottom:.9rem">Estado general flota</p>
+            <div style="position:relative;height:150px"><canvas id="chart-donut"></canvas></div>
+            <div id="donut-legend" style="margin-top:.75rem;display:flex;flex-direction:column;gap:.4rem"></div>
+          </div>
+        </div>
+        <div class="charts-bot">
+          <div class="card" style="padding:1.25rem;border-radius:1rem"><h3 style="font-weight:700;font-size:.85rem;margin-bottom:.25rem">Por recorrido</h3><p style="font-size:.72rem;color:#475569;margin-bottom:.9rem">Diferencia prom. L</p><div style="position:relative;height:160px"><canvas id="chart-rutas"></canvas></div></div>
+          <div class="card" style="padding:1.25rem;border-radius:1rem"><h3 style="font-weight:700;font-size:.85rem;margin-bottom:.25rem">Por conductor</h3><p style="font-size:.72rem;color:#475569;margin-bottom:.9rem">Diferencia prom. L</p><div style="position:relative;height:160px"><canvas id="chart-conds"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- ══ REGISTROS ══ -->
+      <div id="view-registros" style="display:none">
+        <div class="card" style="padding:1rem;border-radius:1rem;margin-bottom:.9rem">
+          <p class="lbl" style="margin-bottom:.6rem">Filtros</p>
+          <div class="filter-grid">
+            <select id="fil-maq"    class="inp"><option value="">Todas las máquinas</option></select>
+            <select id="fil-cond"   class="inp"><option value="">Todos conductores</option></select>
+            <select id="fil-ruta"   class="inp">
+              <option value="">Todos recorridos</option>
+              <option>Temuco - Traiguén</option><option>Traiguén - Temuco</option>
+              <option>Temuco - Lebu</option><option>Lebu - Temuco</option>
+              <option>Temuco - San Martín</option><option>San Martín - Temuco</option>
+              <option>Temuco - Pastene</option><option>Pastene - Temuco</option>
+            </select>
+            <select id="fil-estado" class="inp">
+              <option value="">Todos estados</option>
+              <option value="rojo">🔴 Sobreconsumo</option>
+              <option value="verde">🟢 Normal</option>
+              <option value="azul">🔵 Ahorro</option>
+            </select>
+            <div style="display:flex;gap:.5rem;align-items:center">
+              <input id="fil-fecha" type="date" class="inp" style="flex:1">
+              <button onclick="loadData()" class="btn-grad" style="padding:.6rem .9rem;border-radius:.7rem;font-size:.82rem;white-space:nowrap">Ir</button>
+            </div>
+          </div>
+        </div>
+        <div class="card" style="border-radius:1rem;overflow:hidden">
+          <div style="padding:.9rem 1.1rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.04);flex-wrap:wrap;gap:.5rem">
+            <div><h3 style="font-weight:700;font-size:.85rem">Registros de consumo</h3><p id="tabla-count" style="font-size:.7rem;color:#475569;margin-top:.15rem">0 registros</p></div>
+            <div style="display:flex;gap:.5rem">
+              <button onclick="exportarExcel()" class="btn-amber" style="padding:.45rem .9rem;border-radius:.65rem;font-size:.78rem">📥 Excel</button>
+              <button onclick="abrirModal(false)" class="btn-green" style="padding:.45rem .9rem;border-radius:.65rem;font-size:.78rem">+ Nuevo</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table style="width:100%;font-size:.75rem;border-collapse:collapse">
+              <thead style="background:#040e20">
+                <tr style="color:#475569;text-transform:uppercase;font-size:.65rem;letter-spacing:.06em">
+                  <th style="padding:.7rem .9rem;text-align:left">Máquina</th>
+                  <th style="padding:.7rem .9rem;text-align:left">Conductor</th>
+                  <th style="padding:.7rem .9rem;text-align:left">Recorrido</th>
+                  <th style="padding:.7rem .9rem;text-align:right">Km</th>
+                  <th style="padding:.7rem .9rem;text-align:right">Deseados</th>
+                  <th style="padding:.7rem .9rem;text-align:right">Cargado</th>
+                  <th style="padding:.7rem .9rem;text-align:right">Diferencia</th>
+                  <th style="padding:.7rem .9rem;text-align:center">Estado</th>
+                  <th style="padding:.7rem .9rem;text-align:left">Fecha</th>
+                  <th style="padding:.7rem .9rem;text-align:center">Acc.</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══ ANALYTICS ══ -->
+      <div id="view-analytics" style="display:none">
+        <div class="analytics-grid">
+          <div class="card" style="padding:1.25rem;border-radius:1rem"><h3 style="font-weight:700;font-size:.85rem;margin-bottom:.25rem">Tendencia últimos 14 días</h3><p style="font-size:.72rem;color:#475569;margin-bottom:.9rem">Diferencia promedio diaria</p><div style="position:relative;height:200px"><canvas id="chart-trend"></canvas></div></div>
+          <div class="card" style="padding:1.25rem;border-radius:1rem"><h3 style="font-weight:700;font-size:.85rem;margin-bottom:.25rem">Top sobreconsumo</h3><p style="font-size:.72rem;color:#475569;margin-bottom:.9rem">Máquinas con mayor diferencia negativa</p><div style="position:relative;height:200px"><canvas id="chart-top"></canvas></div></div>
+          <div class="card" style="padding:1.25rem;border-radius:1rem;grid-column:1/-1"><h3 style="font-weight:700;font-size:.85rem;margin-bottom:.25rem">Rendimiento por conductor</h3><p style="font-size:.72rem;color:#475569;margin-bottom:.9rem">Diferencia promedio L — historial completo</p><div style="position:relative;height:160px"><canvas id="chart-conductores"></canvas></div></div>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<!-- ══ MODAL NUEVO/EDITAR ══ -->
+<div id="modal" style="display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.88);backdrop-filter:blur(12px)">
+  <div class="card slide-up" style="border-radius:1.5rem;padding:1.75rem;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;border-color:rgba(37,99,235,.2)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.4rem">
+      <div><h2 id="modal-title" style="font-size:1.1rem;font-weight:900">Nuevo Registro</h2><p id="modal-sub" style="font-size:.72rem;color:#64748b;margin-top:.2rem">Ingresa los datos del viaje</p></div>
+      <button onclick="cerrarModal()" style="width:34px;height:34px;border-radius:.65rem;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#94a3b8;cursor:pointer;font-size:.9rem">✕</button>
+    </div>
+    <input type="hidden" id="f-id">
+    <form onsubmit="guardarRegistro(event)" style="display:flex;flex-direction:column;gap:.9rem">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div><label class="lbl">Nro Máquina</label><input id="f-maq" required class="inp" placeholder="354"></div>
+        <div><label class="lbl">Conductor</label><input id="f-cond" required class="inp" placeholder="Nombre"></div>
+      </div>
+      <div>
+        <label class="lbl">Recorrido</label>
+        <select id="f-ruta" required class="inp" onchange="autocompletar()">
+          <option value="">— Seleccionar recorrido —</option>
+          <optgroup label="Ida · Temuco → Destino">
+            <option value="Temuco - Traiguén">Temuco → Traiguén (85 km)</option>
+            <option value="Temuco - Lebu">Temuco → Lebu (195 km)</option>
+            <option value="Temuco - San Martín">Temuco → San Martín (140 km)</option>
+            <option value="Temuco - Pastene">Temuco → Pastene (110 km)</option>
+          </optgroup>
+          <optgroup label="Regreso · Destino → Temuco">
+            <option value="Traiguén - Temuco">Traiguén → Temuco (85 km)</option>
+            <option value="Lebu - Temuco">Lebu → Temuco (195 km)</option>
+            <option value="San Martín - Temuco">San Martín → Temuco (140 km)</option>
+            <option value="Pastene - Temuco">Pastene → Temuco (110 km)</option>
+          </optgroup>
+        </select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div><label class="lbl">Km Recorridos</label><input id="f-km" type="number" step="0.1" min="0.1" required class="inp" oninput="calcPreview()"></div>
+        <div><label class="lbl">Rend. Esp. (L/100km)</label><input id="f-esp" type="number" step="0.01" min="0" required class="inp" oninput="calcPreview()"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem">
+        <div><label class="lbl">Combustible Cargado (L)</label><input id="f-fuel" type="number" step="0.1" min="0" required class="inp" oninput="calcPreview()"></div>
+        <div><label class="lbl">Fecha</label><input id="f-fecha" type="date" required class="inp"></div>
+      </div>
+      <div id="preview" style="display:none;border-radius:.9rem;padding:.9rem;border:1px solid rgba(255,255,255,.06)">
+        <p class="lbl" style="margin-bottom:.6rem">Vista previa</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;text-align:center;margin-bottom:.6rem">
+          <div class="glass" style="border-radius:.75rem;padding:.65rem"><p style="font-size:.68rem;color:#64748b;margin-bottom:.2rem">Deseados</p><p id="p-des" style="font-size:1.2rem;font-weight:900;color:#fbbf24">—</p></div>
+          <div class="glass" style="border-radius:.75rem;padding:.65rem"><p style="font-size:.68rem;color:#64748b;margin-bottom:.2rem">Cargado</p><p id="p-fuel2" style="font-size:1.2rem;font-weight:900;color:white">—</p></div>
+          <div class="glass" style="border-radius:.75rem;padding:.65rem"><p style="font-size:.68rem;color:#64748b;margin-bottom:.2rem">Diferencia</p><p id="p-diff" style="font-size:1.2rem;font-weight:900">—</p></div>
+        </div>
+        <div id="p-status-box" style="border-radius:.75rem;padding:.65rem;text-align:center;font-weight:700;font-size:.82rem"></div>
+      </div>
+      <button type="submit" id="btn-submit" class="btn-grad" style="padding:.9rem;border-radius:1rem;font-size:.95rem;width:100%">💾 Guardar Registro</button>
+    </form>
+  </div>
+</div>
+
+<!-- ══ MODAL ELIMINAR ══ -->
+<div id="modal-del" style="display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.88);backdrop-filter:blur(12px)">
+  <div class="card slide-up" style="border-radius:1.5rem;padding:2rem;width:100%;max-width:360px;text-align:center;border-color:rgba(239,68,68,.2)">
+    <div style="width:56px;height:56px;border-radius:1rem;margin:0 auto 1rem;display:flex;align-items:center;justify-content:center;font-size:1.8rem;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2)">🗑️</div>
+    <h3 style="font-size:1rem;font-weight:900;margin-bottom:.5rem">Eliminar registro</h3>
+    <p style="font-size:.83rem;color:#94a3b8;margin-bottom:1.5rem">¿Confirmas eliminar este registro? No se puede deshacer.</p>
+    <div style="display:flex;gap:.75rem">
+      <button onclick="cerrarDel()" style="flex:1;padding:.75rem;border-radius:.75rem;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#94a3b8;font-weight:700;font-size:.85rem;cursor:pointer">Cancelar</button>
+      <button onclick="confirmarDel()" style="flex:1;padding:.75rem;border-radius:.75rem;border:none;background:linear-gradient(135deg,#dc2626,#b91c1c);color:white;font-weight:700;font-size:.85rem;cursor:pointer">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL HISTORIAL MÁQUINA ══ -->
+<div id="modal-hist" style="display:none;position:fixed;inset:0;z-index:50;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.88);backdrop-filter:blur(12px)">
+  <div class="card slide-up" style="border-radius:1.5rem;padding:1.75rem;width:100%;max-width:640px;max-height:92vh;overflow-y:auto;border-color:rgba(37,99,235,.2)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+      <div>
+        <h2 id="hist-title" style="font-size:1.1rem;font-weight:900">Historial Máquina</h2>
+        <p id="hist-sub" style="font-size:.72rem;color:#64748b;margin-top:.2rem">Evolución de diferencia de combustible</p>
+      </div>
+      <button onclick="cerrarHist()" style="width:34px;height:34px;border-radius:.65rem;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#94a3b8;cursor:pointer;font-size:.9rem">✕</button>
+    </div>
+    <!-- Stats rápidas -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem;margin-bottom:1.1rem">
+      <div class="glass" style="border-radius:.8rem;padding:.75rem;text-align:center"><p style="font-size:.68rem;color:#64748b;margin-bottom:.2rem">Viajes</p><p id="hist-viajes" style="font-size:1.4rem;font-weight:900">—</p></div>
+      <div class="glass" style="border-radius:.8rem;padding:.75rem;text-align:center"><p style="font-size:.68rem;color:#64748b;margin-bottom:.2rem">Promedio</p><p id="hist-prom" style="font-size:1.4rem;font-weight:900">—</p></div>
+      <div class="glass" style="border-radius:.8rem;padding:.75rem;text-align:center"><p style="font-size:.68rem;color:#64748b;margin-bottom:.2rem">Alertas 🔴</p><p id="hist-alertas" style="font-size:1.4rem;font-weight:900;color:#f87171">—</p></div>
+    </div>
+    <!-- Gráfico línea -->
+    <div style="position:relative;height:220px;margin-bottom:1rem"><canvas id="chart-hist"></canvas></div>
+    <!-- Tabla mini -->
+    <div class="table-wrap" style="border-radius:.75rem;overflow:hidden;border:1px solid rgba(255,255,255,.06)">
+      <table style="width:100%;font-size:.73rem;border-collapse:collapse">
+        <thead style="background:#040e20">
+          <tr style="color:#475569;text-transform:uppercase;font-size:.63rem;letter-spacing:.06em">
+            <th style="padding:.55rem .8rem;text-align:left">Fecha</th>
+            <th style="padding:.55rem .8rem;text-align:left">Conductor</th>
+            <th style="padding:.55rem .8rem;text-align:left">Recorrido</th>
+            <th style="padding:.55rem .8rem;text-align:right">Diferencia</th>
+            <th style="padding:.55rem .8rem;text-align:center">Estado</th>
+          </tr>
+        </thead>
+        <tbody id="hist-tabla"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPA_URL="https://zojsmvbsvpdfwadikjrn.supabase.co", SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvanNtdmJzdnBkZndhZGlranJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3MDI3MzUsImV4cCI6MjA4NTI3ODczNX0.pF1SNGAWRHSAsb7rMYMKmfkaQ0ux_SRh32REbtYCjD4";
+const RECORRIDOS={"Temuco - Traiguén":{km:85,esp:3.2},"Traiguén - Temuco":{km:85,esp:3.2},"Temuco - Lebu":{km:195,esp:3.1},"Lebu - Temuco":{km:195,esp:3.1},"Temuco - San Martín":{km:140,esp:3.15},"San Martín - Temuco":{km:140,esp:3.15},"Temuco - Pastene":{km:110,esp:3.2},"Pastene - Temuco":{km:110,esp:3.2}};
+const USUARIOS={gabriel:"narbus2026",alejandro:"narbus2026",jordan:"narbus2026",freddy:"narbus2026",reinaldo:"narbus2026"};
+const TOL=2, ALERTA_N=3;
+let registros=[],charts={},delId=null,rangoActivo="7d",rangoDesde=null,rangoHasta=null,todosRegistros=[];
+
+// ── UTILS ──
+function calcular(km,rend,cargado){const des=parseFloat(km)/parseFloat(rend);const dif=des-parseFloat(cargado);return{deseados:des,diferencia:dif,estado:dif<-TOL?"rojo":dif>TOL?"azul":"verde"};}
+function colorBar(v){return v<-TOL?"rgba(239,68,68,.78)":v>TOL?"rgba(34,211,238,.78)":"rgba(16,185,129,.78)";}
+function sbH(){return{"apikey":SUPA_KEY,"Authorization":"Bearer "+SUPA_KEY,"Content-Type":"application/json","Accept":"application/json"};}
+async function sbGet(p){const r=await fetch(SUPA_URL+p,{headers:sbH()});if(!r.ok){console.error(r.status);return[];}return r.json();}
+async function sbPost(p,b){const r=await fetch(SUPA_URL+p,{method:"POST",headers:{...sbH(),Prefer:"return=minimal"},body:JSON.stringify(b)});return r.ok;}
+async function sbPatch(p,b){const r=await fetch(SUPA_URL+p,{method:"PATCH",headers:{...sbH(),Prefer:"return=minimal"},body:JSON.stringify(b)});return r.ok;}
+async function sbDel(p){const r=await fetch(SUPA_URL+p,{method:"DELETE",headers:sbH()});return r.ok;}
+function isoHoy(){return new Date().toISOString().split("T")[0];}
+function isoHace(n){const d=new Date();d.setDate(d.getDate()-n);return d.toISOString().split("T")[0];}
+function primerDiaMes(){const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1).toISOString().split("T")[0];}
+
+// ── TOAST ──
+function toast(msg,tipo="verde"){
+  const t=document.getElementById("toast");
+  const cfg={verde:{bg:"rgba(16,185,129,.15)",bc:"rgba(16,185,129,.4)",ic:"✅"},rojo:{bg:"rgba(239,68,68,.15)",bc:"rgba(239,68,68,.4)",ic:"⚠️"},azul:{bg:"rgba(99,102,241,.15)",bc:"rgba(99,102,241,.4)",ic:"ℹ️"}};
+  const c=cfg[tipo]||cfg.verde;
+  t.innerHTML=`<span>${c.ic}</span><span>${msg}</span>`;
+  t.style.cssText=`display:flex;align-items:center;gap:.75rem;padding:.85rem 1.2rem;border-radius:1rem;font-size:.85rem;font-weight:700;min-width:220px;box-shadow:0 8px 32px rgba(0,0,0,.4);position:fixed;bottom:1.5rem;right:1.5rem;z-index:999;background:${c.bg};border:1px solid ${c.bc};animation:toast-in .3s ease forwards;`;
+  clearTimeout(t._to);
+  t._to=setTimeout(()=>{t.style.animation="toast-out .3s ease forwards";setTimeout(()=>t.style.display="none",300);},3000);
+}
+
+// ── AUTH ──
+function doLogin(){
+  const u=document.getElementById("inp-user").value.trim().toLowerCase();
+  const p=document.getElementById("inp-pass").value;
+  if(USUARIOS[u]&&USUARIOS[u]===p){
+    document.getElementById("login-screen").style.display="none";
+    document.getElementById("app").style.display="";
+    document.getElementById("sidebar-user").textContent=u.charAt(0).toUpperCase()+u.slice(1);
+    document.getElementById("avatar").textContent=u.charAt(0).toUpperCase();
+    showView("overview");loadData();
+  }else{document.getElementById("err-msg").style.display="block";}
+}
+function doLogout(){document.getElementById("app").style.display="none";document.getElementById("login-screen").style.display="flex";}
+document.getElementById("inp-pass").onkeydown=e=>{if(e.key==="Enter")doLogin();};
+document.getElementById("inp-user").onkeydown=e=>{if(e.key==="Enter")doLogin();};
+
+// ── SIDEBAR ──
+function openSidebar(){document.getElementById("sidebar").classList.add("open");document.getElementById("sidebar-overlay").classList.add("show");}
+function closeSidebar(){document.getElementById("sidebar").classList.remove("open");document.getElementById("sidebar-overlay").classList.remove("show");}
+
+// ── NAV ──
+function showView(v){
+  ["overview","registros","analytics"].forEach(id=>document.getElementById("view-"+id).style.display=id===v?"block":"none");
+  document.querySelectorAll(".nav-btn").forEach(b=>b.classList.remove("nav-active"));
+  document.querySelectorAll(".nav-btn")[{"overview":0,"registros":1,"analytics":2}[v]].classList.add("nav-active");
+  document.getElementById("page-title").textContent={"overview":"Overview","registros":"Registros","analytics":"Analytics"}[v];
+  document.getElementById("page-sub").textContent={"overview":"Vista general del sistema","registros":"Historial de consumo","analytics":"Análisis avanzado"}[v];
+  document.getElementById("export-btn-header").style.display=v==="registros"?"block":"none";
+  if(v==="analytics")renderAnalytics();
+}
+
+// ── RANGO DE FECHAS ──
+function setRango(r,btn){
+  rangoActivo=r;
+  document.querySelectorAll(".rpill").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  const cr=document.getElementById("custom-range");
+  cr.style.display=r==="custom"?"flex":"none";
+  if(r!=="custom")aplicarRango();
+}
+function aplicarRango(){
+  const hoy=isoHoy();
+  let desde=null,hasta=hoy;
+  if(rangoActivo==="7d")desde=isoHace(7);
+  else if(rangoActivo==="30d")desde=isoHace(30);
+  else if(rangoActivo==="mes")desde=primerDiaMes();
+  else if(rangoActivo==="todo")desde=null;
+  else if(rangoActivo==="custom"){
+    desde=document.getElementById("rango-desde").value||null;
+    hasta=document.getElementById("rango-hasta").value||hoy;
+  }
+  if(rangoActivo==="todo")registros=todosRegistros;
+  else registros=todosRegistros.filter(r=>{
+    if(desde&&r.date<desde)return false;
+    if(r.date>hasta)return false;
+    return true;
+  });
+  renderKPIs();renderTabla();renderCharts();detectarAlertas();
+}
+
+// ── CARGA ──
+async function loadData(){
+  document.getElementById("conn-dot").style.background="#facc15";
+  document.getElementById("conn-txt").textContent="Cargando...";
+  const maq=document.getElementById("fil-maq")?.value||"";
+  const cond=document.getElementById("fil-cond")?.value||"";
+  const ruta=document.getElementById("fil-ruta")?.value||"";
+  const fecha=document.getElementById("fil-fecha")?.value||"";
+  let url="/rest/v1/maquinas?select=*&order=date.desc";
+  if(maq)url+="&machine_num=eq."+encodeURIComponent(maq);
+  if(cond)url+="&driver=eq."+encodeURIComponent(cond);
+  if(ruta)url+="&route=eq."+encodeURIComponent(ruta);
+  if(fecha)url+="&date=eq."+fecha;
+  todosRegistros=await sbGet(url);
+  document.getElementById("conn-dot").style.background="#22d3ee";
+  document.getElementById("conn-txt").textContent="Conectado";
+  aplicarRango();
+  actualizarFiltros();
+}
+
+function getUltimos(arr){const v={},r=[];(arr||registros).forEach(x=>{if(!v[x.machine_num]){v[x.machine_num]=true;r.push(x);}});return r;}
+
+// ── KPIs ──
+function renderKPIs(){
+  let red=0,green=0,blue=0;
+  getUltimos().forEach(r=>{const{estado}=calcular(r.distance,r.expected_render,r.fuel);if(estado==="rojo")red++;else if(estado==="verde")green++;else blue++;});
+  document.getElementById("k-total").textContent=registros.length;
+  document.getElementById("k-red").textContent=red;
+  document.getElementById("k-green").textContent=green;
+  document.getElementById("k-blue").textContent=blue;
+  document.getElementById("k-km").textContent=registros.reduce((s,r)=>s+parseFloat(r.distance),0).toFixed(0);
+  document.getElementById("tabla-count").textContent=registros.length+" registros";
+}
+
+// ── ALERTAS AUTOMÁTICAS ──
+function detectarAlertas(){
+  // Agrupa por máquina ordenado por fecha desc (ya viene así)
+  const porMaq={};
+  todosRegistros.forEach(r=>{if(!porMaq[r.machine_num])porMaq[r.machine_num]=[];porMaq[r.machine_num].push(r);});
+  const alertas=[];
+  Object.entries(porMaq).forEach(([maq,regs])=>{
+    // últimos N ordenados desc
+    const ultN=regs.slice(0,ALERTA_N);
+    if(ultN.length===ALERTA_N&&ultN.every(r=>calcular(r.distance,r.expected_render,r.fuel).estado==="rojo")){
+      const difs=ultN.map(r=>calcular(r.distance,r.expected_render,r.fuel).diferencia);
+      const prom=(difs.reduce((a,b)=>a+b,0)/difs.length).toFixed(2);
+      alertas.push({maq,n:ultN.length,prom});
+    }
+  });
+  const box=document.getElementById("alertas-box");
+  if(!alertas.length){box.style.display="none";return;}
+  box.style.display="block";
+  box.innerHTML=`
+    <div style="border-radius:1rem;overflow:hidden;border:1px solid rgba(239,68,68,.3);background:rgba(239,68,68,.06)">
+      <div style="padding:.75rem 1rem;background:rgba(239,68,68,.1);display:flex;align-items:center;gap:.6rem;border-bottom:1px solid rgba(239,68,68,.15)">
+        <span style="font-size:1.1rem">🚨</span>
+        <span style="font-weight:900;font-size:.85rem;color:#fca5a5">Alertas de sobreconsumo recurrente</span>
+        <span style="margin-left:auto;background:rgba(239,68,68,.3);color:#fca5a5;font-size:.7rem;font-weight:900;padding:.15rem .55rem;border-radius:999px">${alertas.length}</span>
+      </div>
+      ${alertas.map(a=>`
+        <div style="padding:.7rem 1rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(239,68,68,.08);cursor:pointer" onclick="abrirHistorial('${a.maq}')">
+          <div style="display:flex;align-items:center;gap:.65rem">
+            <div class="alerta-pulse" style="width:8px;height:8px;border-radius:50%;background:#ef4444;flex-shrink:0"></div>
+            <span style="font-weight:900;font-size:.85rem">Máq. ${a.maq}</span>
+            <span style="font-size:.75rem;color:#94a3b8">${a.n} registros rojos seguidos · prom. <span style="color:#f87171;font-weight:700">${a.prom} L</span></span>
+          </div>
+          <span style="font-size:.72rem;color:#6366f1">Ver historial →</span>
+        </div>
+      `).join("")}
+    </div>`;
+}
+
+// ── TABLA ──
+function renderTabla(){
+  const ef=document.getElementById("fil-estado")?.value||"";
+  const data=ef?registros.filter(r=>calcular(r.distance,r.expected_render,r.fuel).estado===ef):registros;
+  const tb=document.getElementById("tabla-body");
+  if(!data.length){tb.innerHTML='<tr><td colspan="10" style="padding:2.5rem;text-align:center;color:#334155;font-size:.82rem">Sin registros</td></tr>';return;}
+  tb.innerHTML=data.map(r=>{
+    const{deseados,diferencia,estado}=calcular(r.distance,r.expected_render,r.fuel);
+    const rc=estado==="rojo"?"row-rojo":estado==="azul"?"row-azul":"row-verde";
+    const dc=estado==="rojo"?"color:#f87171":estado==="azul"?"color:#60a5fa":"color:#34d399";
+    const bdg=estado==="rojo"?'<span class="badge-rojo" style="padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:700;white-space:nowrap">🔴 Sobre</span>':estado==="azul"?'<span class="badge-azul" style="padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:700;white-space:nowrap">🔵 Ahorro</span>':'<span class="badge-verde" style="padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:700;white-space:nowrap">🟢 OK</span>';
+    return `<tr class="${rc}" style="border-bottom:1px solid rgba(255,255,255,.03)">
+      <td style="padding:.65rem .9rem;font-weight:900;cursor:pointer;color:#818cf8" onclick="abrirHistorial('${r.machine_num}')" title="Ver historial">${r.machine_num}</td>
+      <td style="padding:.65rem .9rem;color:#cbd5e1">${r.driver}</td>
+      <td style="padding:.65rem .9rem;color:#818cf8;white-space:nowrap">${r.route}</td>
+      <td style="padding:.65rem .9rem;text-align:right;font-family:monospace">${r.distance}</td>
+      <td style="padding:.65rem .9rem;text-align:right;font-family:monospace;color:#fbbf24;font-weight:700">${deseados.toFixed(2)}</td>
+      <td style="padding:.65rem .9rem;text-align:right;font-family:monospace">${r.fuel}</td>
+      <td style="padding:.65rem .9rem;text-align:right;font-family:monospace;font-weight:900;${dc}">${diferencia>=0?"+":""}${diferencia.toFixed(2)}</td>
+      <td style="padding:.65rem .9rem;text-align:center">${bdg}</td>
+      <td style="padding:.65rem .9rem;color:#475569;white-space:nowrap">${r.date}</td>
+      <td style="padding:.65rem .9rem;text-align:center">
+        <div style="display:flex;gap:.3rem;justify-content:center">
+          <button onclick="abrirModal(${r.id})" style="width:28px;height:28px;border-radius:.5rem;border:none;background:rgba(99,102,241,.1);color:#818cf8;cursor:pointer;font-size:.85rem">✏️</button>
+          <button onclick="pedirDel(${r.id})" style="width:28px;height:28px;border-radius:.5rem;border:none;background:rgba(239,68,68,.08);color:#f87171;cursor:pointer;font-size:.85rem">🗑</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join("");
+}
+
+// ── CHARTS ──
+function mkChart(id,type,data,extraOpts){
+  const el=document.getElementById(id);if(!el)return;
+  if(charts[id]){charts[id].destroy();delete charts[id];}
+  const opts={responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+    scales:type==="doughnut"?{}:{y:{ticks:{color:"#475569",font:{size:10}},grid:{color:"rgba(71,85,105,.1)"}},x:{ticks:{color:"#475569",font:{size:10},maxRotation:30},grid:{display:false}}}};
+  if(type==="doughnut")opts.cutout="70%";
+  if(extraOpts)Object.assign(opts,extraOpts);
+  charts[id]=new Chart(el.getContext("2d"),{type,data,options:opts});
+}
+
+function renderCharts(){
+  const ul=getUltimos();if(!ul.length)return;
+  const labels=ul.map(r=>r.machine_num),vals=ul.map(r=>+calcular(r.distance,r.expected_render,r.fuel).diferencia.toFixed(2));
+
+  // Barra por máquina — clic para historial
+  if(charts["chart-daily"]){charts["chart-daily"].destroy();delete charts["chart-daily"];}
+  const el=document.getElementById("chart-daily");
+  if(el){
+    charts["chart-daily"]=new Chart(el.getContext("2d"),{
+      type:"bar",
+      data:{labels,datasets:[{data:vals,backgroundColor:vals.map(colorBar),borderRadius:6,borderSkipped:false,hoverBackgroundColor:vals.map(v=>v<-TOL?"rgba(239,68,68,1)":v>TOL?"rgba(59,130,246,1)":"rgba(16,185,129,1)")}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`Diferencia: ${c.raw>0?"+":""}${c.raw} L`}}},
+        scales:{y:{ticks:{color:"#475569",font:{size:10}},grid:{color:"rgba(71,85,105,.1)"}},x:{ticks:{color:"#475569",font:{size:10}},grid:{display:false}}},
+        onClick:(e,items)=>{if(items.length){abrirHistorial(labels[items[0].index]);}}}
+    });
+  }
+
+  let red=0,green=0,blue=0;
+  ul.forEach(r=>{const{estado}=calcular(r.distance,r.expected_render,r.fuel);if(estado==="rojo")red++;else if(estado==="verde")green++;else blue++;});
+  mkChart("chart-donut","doughnut",{labels:["Sobreconsumo","Normal","Ahorro"],datasets:[{data:[red,green,blue],backgroundColor:["rgba(239,68,68,.85)","rgba(16,185,129,.85)","rgba(59,130,246,.85)"],borderWidth:0,hoverOffset:5}]});
+  document.getElementById("donut-legend").innerHTML=[
+    `<div style="display:flex;justify-content:space-between;font-size:.75rem"><span style="display:flex;align-items:center;gap:.4rem"><span style="width:8px;height:8px;border-radius:50%;background:#ef4444;display:inline-block"></span>Sobreconsumo</span><span style="font-weight:900;color:#f87171">${red}</span></div>`,
+    `<div style="display:flex;justify-content:space-between;font-size:.75rem"><span style="display:flex;align-items:center;gap:.4rem"><span style="width:8px;height:8px;border-radius:50%;background:#10b981;display:inline-block"></span>Normal</span><span style="font-weight:900;color:#34d399">${green}</span></div>`,
+    `<div style="display:flex;justify-content:space-between;font-size:.75rem"><span style="display:flex;align-items:center;gap:.4rem"><span style="width:8px;height:8px;border-radius:50%;background:#3b82f6;display:inline-block"></span>Ahorro</span><span style="font-weight:900;color:#60a5fa">${blue}</span></div>`
+  ].join("");
+
+  const rutas={};ul.forEach(r=>{const k=r.route;if(!rutas[k])rutas[k]={sum:0,n:0};rutas[k].sum+=calcular(r.distance,r.expected_render,r.fuel).diferencia;rutas[k].n++;});
+  const rl=Object.keys(rutas),rv=rl.map(k=>+(rutas[k].sum/rutas[k].n).toFixed(2));
+  mkChart("chart-rutas","bar",{labels:rl.map(l=>l.replace("Temuco - ","T→").replace(" - Temuco","→T")),datasets:[{data:rv,backgroundColor:rv.map(colorBar),borderRadius:6,borderSkipped:false}]});
+
+  const cMap={};ul.forEach(r=>{const k=r.driver;if(!cMap[k])cMap[k]={sum:0,n:0};cMap[k].sum+=calcular(r.distance,r.expected_render,r.fuel).diferencia;cMap[k].n++;});
+  const cl=Object.keys(cMap),cv=cl.map(k=>+(cMap[k].sum/cMap[k].n).toFixed(2));
+  mkChart("chart-conds","bar",{labels:cl,datasets:[{data:cv,backgroundColor:cv.map(colorBar),borderRadius:6,borderSkipped:false}]});
+}
+
+// ── HISTORIAL POR MÁQUINA ──
+function abrirHistorial(maq){
+  const regs=todosRegistros.filter(r=>r.machine_num===maq).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!regs.length){toast("Sin registros para esta máquina","azul");return;}
+  document.getElementById("hist-title").textContent="Historial — Máquina "+maq;
+  const difs=regs.map(r=>calcular(r.distance,r.expected_render,r.fuel).diferencia);
+  const prom=difs.reduce((a,b)=>a+b,0)/difs.length;
+  const alertas=difs.filter(d=>d<-TOL).length;
+  document.getElementById("hist-viajes").textContent=regs.length;
+  document.getElementById("hist-prom").textContent=(prom>=0?"+":"")+prom.toFixed(2)+" L";
+  document.getElementById("hist-prom").style.color=prom<-TOL?"#f87171":prom>TOL?"#60a5fa":"#34d399";
+  document.getElementById("hist-alertas").textContent=alertas;
+
+  // Gráfico línea
+  const labels=regs.map(r=>r.date);
+  const vals=difs.map(d=>+d.toFixed(2));
+  if(charts["chart-hist"]){charts["chart-hist"].destroy();delete charts["chart-hist"];}
+  const el=document.getElementById("chart-hist");
+  if(el){
+    charts["chart-hist"]=new Chart(el.getContext("2d"),{
+      type:"line",
+      data:{labels,datasets:[{data:vals,borderColor:"#6366f1",backgroundColor:"rgba(99,102,241,.08)",tension:0.3,fill:true,
+        pointBackgroundColor:vals.map(v=>v<-TOL?"#ef4444":v>TOL?"#3b82f6":"#10b981"),
+        pointRadius:5,pointBorderWidth:0}]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`Diferencia: ${c.raw>=0?"+":""}${c.raw} L`}}},
+        scales:{y:{ticks:{color:"#475569",font:{size:10}},grid:{color:"rgba(71,85,105,.1)"}},x:{ticks:{color:"#475569",font:{size:10},maxRotation:30},grid:{display:false}}}}
+    });
+  }
+
+  // Tabla mini
+  document.getElementById("hist-tabla").innerHTML=[...regs].reverse().map(r=>{
+    const{diferencia,estado}=calcular(r.distance,r.expected_render,r.fuel);
+    const dc=estado==="rojo"?"color:#f87171":estado==="azul"?"color:#60a5fa":"color:#34d399";
+    const ic=estado==="rojo"?"🔴":estado==="azul"?"🔵":"🟢";
+    return `<tr style="border-bottom:1px solid rgba(255,255,255,.04)">
+      <td style="padding:.5rem .8rem;color:#475569">${r.date}</td>
+      <td style="padding:.5rem .8rem">${r.driver}</td>
+      <td style="padding:.5rem .8rem;color:#818cf8">${r.route}</td>
+      <td style="padding:.5rem .8rem;text-align:right;font-family:monospace;font-weight:900;${dc}">${diferencia>=0?"+":""}${diferencia.toFixed(2)} L</td>
+      <td style="padding:.5rem .8rem;text-align:center">${ic}</td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("modal-hist").style.display="flex";
+}
+function cerrarHist(){document.getElementById("modal-hist").style.display="none";}
+document.getElementById("modal-hist").addEventListener("click",e=>{if(e.target===document.getElementById("modal-hist"))cerrarHist();});
+
+// ── EXPORT EXCEL ──
+function exportarExcel(){
+  if(!registros.length){toast("Sin datos para exportar","azul");return;}
+  const data=registros.map(r=>{
+    const{deseados,diferencia,estado}=calcular(r.distance,r.expected_render,r.fuel);
+    return{
+      "Máquina":r.machine_num,"Conductor":r.driver,"Recorrido":r.route,
+      "Km":parseFloat(r.distance),"Litros deseados":+deseados.toFixed(2),
+      "Litros cargados":parseFloat(r.fuel),"Diferencia":+diferencia.toFixed(2),
+      "Estado":estado==="rojo"?"Sobreconsumo":estado==="azul"?"Ahorro":"Normal",
+      "Fecha":r.date
+    };
+  });
+  const ws=XLSX.utils.json_to_sheet(data);
+  // Ancho de columnas
+  ws["!cols"]=[{wch:12},{wch:18},{wch:22},{wch:8},{wch:14},{wch:15},{wch:11},{wch:14},{wch:12}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,"Registros");
+  const fecha=isoHoy().replace(/-/g,"");
+  XLSX.writeFile(wb,`narbus_registros_${fecha}.xlsx`);
+  toast("Excel exportado correctamente","verde");
+}
+
+// ── ANALYTICS ──
+function renderAnalytics(){
+  if(!todosRegistros.length)return;
+  const trend={};todosRegistros.forEach(r=>{const d=r.date;if(!trend[d])trend[d]={sum:0,n:0};trend[d].sum+=calcular(r.distance,r.expected_render,r.fuel).diferencia;trend[d].n++;});
+  const tl=Object.keys(trend).sort().slice(-14),tv=tl.map(d=>+(trend[d].sum/trend[d].n).toFixed(2));
+  mkChart("chart-trend","line",{labels:tl,datasets:[{data:tv,borderColor:"#6366f1",backgroundColor:"rgba(99,102,241,.08)",tension:0.4,fill:true,pointBackgroundColor:tv.map(v=>v<-TOL?"#ef4444":v>TOL?"#3b82f6":"#10b981"),pointRadius:5,pointBorderWidth:0}]});
+  const maqNeg={};todosRegistros.forEach(r=>{const{diferencia}=calcular(r.distance,r.expected_render,r.fuel);if(diferencia<0){if(!maqNeg[r.machine_num])maqNeg[r.machine_num]=0;maqNeg[r.machine_num]+=diferencia;}});
+  const sorted=Object.entries(maqNeg).sort((a,b)=>a[1]-b[1]).slice(0,6);
+  mkChart("chart-top","bar",{labels:sorted.map(e=>e[0]),datasets:[{data:sorted.map(e=>+e[1].toFixed(2)),backgroundColor:"rgba(239,68,68,.78)",borderRadius:6,borderSkipped:false}]});
+  const cMap={};todosRegistros.forEach(r=>{const k=r.driver;if(!cMap[k])cMap[k]={sum:0,n:0};cMap[k].sum+=calcular(r.distance,r.expected_render,r.fuel).diferencia;cMap[k].n++;});
+  const cl=Object.keys(cMap),cv=cl.map(k=>+(cMap[k].sum/cMap[k].n).toFixed(2));
+  mkChart("chart-conductores","bar",{labels:cl,datasets:[{data:cv,backgroundColor:cv.map(colorBar),borderRadius:6,borderSkipped:false}]});
+}
+
+function actualizarFiltros(){
+  const fm=document.getElementById("fil-maq")?.value||"",fc=document.getElementById("fil-cond")?.value||"";
+  const ml=[...new Set(todosRegistros.map(r=>r.machine_num))],cl=[...new Set(todosRegistros.map(r=>r.driver))];
+  if(document.getElementById("fil-maq"))document.getElementById("fil-maq").innerHTML='<option value="">Todas las máquinas</option>'+ml.map(m=>`<option value="${m}"${m===fm?" selected":""}>${m}</option>`).join("");
+  if(document.getElementById("fil-cond"))document.getElementById("fil-cond").innerHTML='<option value="">Todos conductores</option>'+cl.map(c=>`<option value="${c}"${c===fc?" selected":""}>${c}</option>`).join("");
+}
+
+// ── MODAL NUEVO/EDITAR ──
+function abrirModal(editId){
+  ["f-maq","f-cond","f-ruta","f-km","f-esp","f-fuel"].forEach(i=>document.getElementById(i).value="");
+  document.getElementById("f-id").value="";
+  document.getElementById("f-fecha").value=isoHoy();
+  document.getElementById("preview").style.display="none";
+  if(editId){
+    const r=registros.find(x=>x.id===editId);if(!r)return;
+    document.getElementById("f-id").value=r.id;document.getElementById("f-maq").value=r.machine_num;
+    document.getElementById("f-cond").value=r.driver;document.getElementById("f-ruta").value=r.route;
+    document.getElementById("f-km").value=r.distance;document.getElementById("f-esp").value=r.expected_render;
+    document.getElementById("f-fuel").value=r.fuel;document.getElementById("f-fecha").value=r.date;
+    document.getElementById("modal-title").textContent="Editar Registro #"+r.id;
+    document.getElementById("modal-sub").textContent="Modifica los campos y guarda";
+    document.getElementById("btn-submit").textContent="✏️ Actualizar Registro";
+    calcPreview();
+  }else{
+    document.getElementById("modal-title").textContent="Nuevo Registro";
+    document.getElementById("modal-sub").textContent="Ingresa los datos del viaje";
+    document.getElementById("btn-submit").textContent="💾 Guardar Registro";
+  }
+  document.getElementById("modal").style.display="flex";
+}
+function cerrarModal(){document.getElementById("modal").style.display="none";}
+document.getElementById("modal").addEventListener("click",e=>{if(e.target===document.getElementById("modal"))cerrarModal();});
+
+function autocompletar(){const d=RECORRIDOS[document.getElementById("f-ruta").value];if(d){document.getElementById("f-km").value=d.km;document.getElementById("f-esp").value=d.esp;calcPreview();}}
+
+function calcPreview(){
+  const km=parseFloat(document.getElementById("f-km").value),esp=parseFloat(document.getElementById("f-esp").value),fuel=parseFloat(document.getElementById("f-fuel").value);
+  if(!km||!esp||!fuel)return;
+  const{deseados,diferencia,estado}=calcular(km,esp,fuel);
+  document.getElementById("p-des").textContent=deseados.toFixed(2);
+  document.getElementById("p-fuel2").textContent=fuel.toFixed(2);
+  document.getElementById("p-diff").textContent=(diferencia>=0?"+":"")+diferencia.toFixed(2);
+  const prev=document.getElementById("preview"),box=document.getElementById("p-status-box");
+  prev.style.display="block";
+  const cfg=estado==="rojo"?{bc:"rgba(239,68,68,.3)",bg:"rgba(239,68,68,.04)",dc:"#f87171",msg:"🔴 Sobreconsumo — cargó MÁS de lo necesario",sbc:"rgba(239,68,68,.1)",sc:"#f87171"}:estado==="azul"?{bc:"rgba(59,130,246,.3)",bg:"rgba(59,130,246,.04)",dc:"#60a5fa",msg:"🔵 Ahorro — cargó MENOS de lo necesario",sbc:"rgba(59,130,246,.1)",sc:"#60a5fa"}:{bc:"rgba(16,185,129,.3)",bg:"rgba(16,185,129,.04)",dc:"#34d399",msg:"🟢 Normal — dentro del rango (±"+TOL+" L)",sbc:"rgba(16,185,129,.1)",sc:"#34d399"};
+  prev.style.borderColor=cfg.bc;prev.style.background=cfg.bg;
+  document.getElementById("p-diff").style.color=cfg.dc;
+  box.style.background=cfg.sbc;box.style.color=cfg.sc;box.textContent=cfg.msg;
+}
+
+async function guardarRegistro(e){
+  e.preventDefault();const btn=document.getElementById("btn-submit"),eid=document.getElementById("f-id").value;
+  btn.textContent="⏳ Guardando...";btn.disabled=true;
+  const payload={machine_num:document.getElementById("f-maq").value,driver:document.getElementById("f-cond").value,route:document.getElementById("f-ruta").value,distance:parseFloat(document.getElementById("f-km").value),fuel:parseFloat(document.getElementById("f-fuel").value),expected_render:parseFloat(document.getElementById("f-esp").value),date:document.getElementById("f-fecha").value};
+  const ok=eid?await sbPatch("/rest/v1/maquinas?id=eq."+eid,payload):await sbPost("/rest/v1/maquinas",payload);
+  btn.textContent=eid?"✏️ Actualizar Registro":"💾 Guardar Registro";btn.disabled=false;
+  if(ok){cerrarModal();toast(eid?"Registro actualizado":"Registro guardado","verde");loadData();}
+  else{toast("Error al guardar. Verifica la conexión.","rojo");}
+}
+
+function pedirDel(id){delId=id;document.getElementById("modal-del").style.display="flex";}
+function cerrarDel(){document.getElementById("modal-del").style.display="none";delId=null;}
+async function confirmarDel(){if(!delId)return;await sbDel("/rest/v1/maquinas?id=eq."+delId);cerrarDel();toast("Registro eliminado","rojo");loadData();}
+</script>
+</body>
+</html>
