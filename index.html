@@ -183,10 +183,10 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
         <div class="card" style="padding:.9rem 1rem;border-radius:1rem;margin-bottom:1rem">
           <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.75rem">
             <div style="display:flex;gap:.4rem;flex-wrap:wrap">
-              <button class="rpill active" onclick="setRango('7d',this)">7 días</button>
+              <button class="rpill" onclick="setRango('7d',this)">7 días</button>
               <button class="rpill" onclick="setRango('30d',this)">30 días</button>
               <button class="rpill" onclick="setRango('mes',this)">Este mes</button>
-              <button class="rpill" onclick="setRango('todo',this)">Todo</button>
+              <button class="rpill active" onclick="setRango('todo',this)">Todo</button>
               <button class="rpill" onclick="setRango('custom',this)">Personalizado</button>
             </div>
             <div id="custom-range" style="display:none;display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
@@ -279,6 +279,13 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
               <tbody id="tabla-body"></tbody>
             </table>
           </div>
+
+          <!-- PAGINACIÓN TABLA -->
+          <div id="tabla-pagination" style="display:none; padding:.75rem 1.1rem; border-top:1px solid rgba(255,255,255,.04); align-items:center; justify-content:space-between; gap:.75rem; flex-wrap:wrap;">
+            <div id="tabla-pagination-info" style="font-size:.72rem; color:#64748b;"></div>
+            <div id="tabla-pagination-btns" style="display:flex; gap:.35rem; flex-wrap:wrap;"></div>
+          </div>
+
         </div>
       </div>
 
@@ -401,7 +408,7 @@ const SUPA_URL="https://zojsmvbsvpdfwadikjrn.supabase.co", SUPA_KEY="eyJhbGciOiJ
 const RECORRIDOS={"Temuco - Traiguén":{km:85,esp:3.2},"Traiguén - Temuco":{km:85,esp:3.2},"Temuco - Lebu":{km:195,esp:3.1},"Lebu - Temuco":{km:195,esp:3.1},"Temuco - San Martín":{km:140,esp:3.15},"San Martín - Temuco":{km:140,esp:3.15},"Temuco - Pastene":{km:110,esp:3.2},"Pastene - Temuco":{km:110,esp:3.2}};
 const USUARIOS={gabriel:"narbus2026",alejandro:"narbus2026",jordan:"narbus2026",freddy:"narbus2026",reinaldo:"narbus2026"};
 const TOL=2, ALERTA_N=3;
-let registros=[],charts={},delId=null,rangoActivo="7d",rangoDesde=null,rangoHasta=null,todosRegistros=[];
+let registros=[],charts={},delId=null,rangoActivo="todo",rangoDesde=null,rangoHasta=null,todosRegistros=[];
 
 // ── UTILS ──
 function calcular(km,rend,cargado){const des=parseFloat(km)/parseFloat(rend);const dif=des-parseFloat(cargado);return{deseados:des,diferencia:dif,estado:dif<-TOL?"rojo":dif>TOL?"azul":"verde"};}
@@ -411,6 +418,23 @@ async function sbGet(p){const r=await fetch(SUPA_URL+p,{headers:sbH()});if(!r.ok
 async function sbPost(p,b){const r=await fetch(SUPA_URL+p,{method:"POST",headers:{...sbH(),Prefer:"return=minimal"},body:JSON.stringify(b)});return r.ok;}
 async function sbPatch(p,b){const r=await fetch(SUPA_URL+p,{method:"PATCH",headers:{...sbH(),Prefer:"return=minimal"},body:JSON.stringify(b)});return r.ok;}
 async function sbDel(p){const r=await fetch(SUPA_URL+p,{method:"DELETE",headers:sbH()});return r.ok;}
+
+// GET con paginación (evita límite de filas del API)
+async function sbGetAll(p,pageSize=1000){
+  let out=[];
+  let offset=0;
+  while(true){
+    const sep=p.includes("?")?"&":"?";
+    const chunk=await sbGet(p+sep+"limit="+pageSize+"&offset="+offset);
+    if(!chunk||!chunk.length)break;
+    out=out.concat(chunk);
+    if(chunk.length<pageSize)break;
+    offset+=pageSize;
+    if(offset>200000)break; // seguridad
+  }
+  return out;
+}
+
 function isoHoy(){return new Date().toISOString().split("T")[0];}
 function isoHace(n){const d=new Date();d.setDate(d.getDate()-n);return d.toISOString().split("T")[0];}
 function primerDiaMes(){const d=new Date();return new Date(d.getFullYear(),d.getMonth(),1).toISOString().split("T")[0];}
@@ -479,11 +503,15 @@ function aplicarRango(){
   }
   if(rangoActivo==="todo")registros=todosRegistros;
   else registros=todosRegistros.filter(r=>{
-    if(desde&&r.date<desde)return false;
-    if(r.date>hasta)return false;
+    const d=String(r.date||"").slice(0,10);
+    if(desde&&d<desde)return false;
+    if(d>hasta)return false;
     return true;
   });
-  renderKPIs();renderTabla();renderCharts();detectarAlertas();
+  renderKPIs();
+  // reset paginación al cambiar rango
+  if(typeof currentPage!=="undefined"){currentPage=1;lastTablaFilterKey="";}
+  renderTabla();renderCharts();detectarAlertas();
 }
 
 // ── CARGA ──
@@ -497,11 +525,16 @@ async function loadData(){
   let url="/rest/v1/maquinas?select=*&order=date.desc";
   if(maq)url+="&machine_num=eq."+encodeURIComponent(maq);
   if(cond)url+="&driver=eq."+encodeURIComponent(cond);
-  if(ruta)url+="&route=eq."+encodeURIComponent(ruta);
-  if(fecha)url+="&date=eq."+fecha;
-  todosRegistros=await sbGet(url);
+  if(ruta)url+="&route=eq."+encodeURIComponent(ruta);  if(fecha){
+    const d=new Date(fecha+"T00:00:00");
+    d.setDate(d.getDate()+1);
+    const next=d.toISOString().slice(0,10);
+    url+="&date=gte."+fecha+"&date=lt."+next;
+  }
+  todosRegistros=await sbGetAll(url);
   document.getElementById("conn-dot").style.background="#22d3ee";
   document.getElementById("conn-txt").textContent="Conectado";
+  lastTablaFilterKey="";currentPage=1;
   aplicarRango();
   actualizarFiltros();
 }
@@ -559,34 +592,140 @@ function detectarAlertas(){
 }
 
 // ── TABLA ──
+// ── TABLA (mejorada + paginación) ──
+let currentPage = 1;
+const rowsPerPage = 25;
+let lastTablaFilterKey = "";
+
+function escapeHTML(v){
+  return String(v??"")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
+function getTablaFilterKey(){
+  const ef=document.getElementById("fil-estado")?.value||"";
+  const maq=document.getElementById("fil-maq")?.value||"";
+  const cond=document.getElementById("fil-cond")?.value||"";
+  const ruta=document.getElementById("fil-ruta")?.value||"";
+  const fecha=document.getElementById("fil-fecha")?.value||"";
+  return [ef,maq,cond,ruta,fecha,rangoActivo||""].join("|");
+}
+
+function setPage(p){
+  currentPage=p;
+  renderTabla();
+}
+
+function buildPageButtons(totalPages){
+  const mkBtn=(label,page,disabled=false,active=false)=>{
+    const base=`padding:.35rem .6rem;border-radius:.6rem;font-size:.75rem;font-weight:800;cursor:pointer;border:1px solid rgba(255,255,255,.08);`;
+    const stActive=`background:linear-gradient(135deg,#2563eb,#0891b2);color:white;border:none;`;
+    const stNormal=`background:rgba(255,255,255,.04);color:#94a3b8;`;
+    const stDisabled=`opacity:.35;cursor:not-allowed;`;
+    return `<button ${disabled?"disabled":""} onclick="setPage(${page})" style="${base}${active?stActive:stNormal}${disabled?stDisabled:""}">${label}</button>`;
+  };
+
+  const btns=[];
+  btns.push(mkBtn('⟪',1,currentPage===1));
+  btns.push(mkBtn('‹',Math.max(1,currentPage-1),currentPage===1));
+
+  const start=Math.max(1,currentPage-2);
+  const end=Math.min(totalPages,currentPage+2);
+  if(start>1) btns.push(`<span style="color:#475569;font-size:.8rem;padding:.2rem .25rem;">…</span>`);
+  for(let p=start;p<=end;p++) btns.push(mkBtn(String(p),p,false,p===currentPage));
+  if(end<totalPages) btns.push(`<span style="color:#475569;font-size:.8rem;padding:.2rem .25rem;">…</span>`);
+
+  btns.push(mkBtn('›',Math.min(totalPages,currentPage+1),currentPage===totalPages));
+  btns.push(mkBtn('⟫',totalPages,currentPage===totalPages));
+  return btns.join('');
+}
+
 function renderTabla(){
   const ef=document.getElementById("fil-estado")?.value||"";
   const data=ef?registros.filter(r=>calcular(r.distance,r.expected_render,r.fuel).estado===ef):registros;
+
   const tb=document.getElementById("tabla-body");
-  if(!data.length){tb.innerHTML='<tr><td colspan="10" style="padding:2.5rem;text-align:center;color:#334155;font-size:.82rem">Sin registros</td></tr>';return;}
-  tb.innerHTML=data.map(r=>{
-    const{deseados,diferencia,estado}=calcular(r.distance,r.expected_render,r.fuel);
-    const rc=estado==="rojo"?"row-rojo":estado==="azul"?"row-azul":"row-verde";
-    const dc=estado==="rojo"?"color:#f87171":estado==="azul"?"color:#60a5fa":"color:#34d399";
-    const bdg=estado==="rojo"?'<span class="badge-rojo" style="padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:700;white-space:nowrap">🔴 Sobre</span>':estado==="azul"?'<span class="badge-azul" style="padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:700;white-space:nowrap">🔵 Ahorro</span>':'<span class="badge-verde" style="padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:700;white-space:nowrap">🟢 OK</span>';
-    return `<tr class="${rc}" style="border-bottom:1px solid rgba(255,255,255,.03)">
-      <td style="padding:.65rem .9rem;font-weight:900;cursor:pointer;color:#818cf8" onclick="abrirHistorial('${r.machine_num}')" title="Ver historial">${r.machine_num}</td>
-      <td style="padding:.65rem .9rem;color:#cbd5e1">${r.driver}</td>
-      <td style="padding:.65rem .9rem;color:#818cf8;white-space:nowrap">${r.route}</td>
-      <td style="padding:.65rem .9rem;text-align:right;font-family:monospace">${r.distance}</td>
-      <td style="padding:.65rem .9rem;text-align:right;font-family:monospace;color:#fbbf24;font-weight:700">${deseados.toFixed(2)}</td>
-      <td style="padding:.65rem .9rem;text-align:right;font-family:monospace">${r.fuel}</td>
-      <td style="padding:.65rem .9rem;text-align:right;font-family:monospace;font-weight:900;${dc}">${diferencia>=0?"+":""}${diferencia.toFixed(2)}</td>
-      <td style="padding:.65rem .9rem;text-align:center">${bdg}</td>
-      <td style="padding:.65rem .9rem;color:#475569;white-space:nowrap">${r.date}</td>
-      <td style="padding:.65rem .9rem;text-align:center">
-        <div style="display:flex;gap:.3rem;justify-content:center">
-          <button onclick="abrirModal(${r.id})" style="width:28px;height:28px;border-radius:.5rem;border:none;background:rgba(99,102,241,.1);color:#818cf8;cursor:pointer;font-size:.85rem">✏️</button>
-          <button onclick="pedirDel(${r.id})" style="width:28px;height:28px;border-radius:.5rem;border:none;background:rgba(239,68,68,.08);color:#f87171;cursor:pointer;font-size:.85rem">🗑</button>
-        </div>
-      </td>
-    </tr>`;
-  }).join("");
+  const cnt=document.getElementById("tabla-count");
+  const pag=document.getElementById("tabla-pagination");
+  const info=document.getElementById("tabla-pagination-info");
+  const btns=document.getElementById("tabla-pagination-btns");
+
+  const fk=getTablaFilterKey();
+  if(fk!==lastTablaFilterKey){
+    lastTablaFilterKey=fk;
+    currentPage=1;
+  }
+
+  if(!data.length){
+    tb.innerHTML='<tr><td colspan="10" style="padding:2.5rem;text-align:center;color:#334155;font-size:.82rem">Sin registros</td></tr>';
+    if(cnt) cnt.textContent='0 registros';
+    if(pag) pag.style.display='none';
+    return;
+  }
+
+  const total=data.length;
+  const totalPages=Math.max(1,Math.ceil(total/rowsPerPage));
+  currentPage=Math.min(Math.max(1,currentPage),totalPages);
+
+  const startIdx=(currentPage-1)*rowsPerPage;
+  const endIdx=Math.min(startIdx+rowsPerPage,total);
+  const pageData=data.slice(startIdx,endIdx);
+
+  tb.innerHTML=pageData.map(r=>{
+    const {deseados,diferencia,estado}=calcular(r.distance,r.expected_render,r.fuel);
+    const rc=estado==="rojo"?"row-rojo":(estado==="azul"?"row-azul":"row-verde");
+    const dc=estado==="rojo"?"#f87171":(estado==="azul"?"#60a5fa":"#34d399");
+
+    const bdg=(estado==="rojo")
+      ? '<span class="badge-rojo" style="padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:700;white-space:nowrap">Sobre</span>'
+      : (estado==="azul")
+        ? '<span class="badge-azul" style="padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:700;white-space:nowrap">Ahorro</span>'
+        : '<span class="badge-verde" style="padding:.2rem .6rem;border-radius:999px;font-size:.65rem;font-weight:700;white-space:nowrap">OK</span>';
+
+    const maq=escapeHTML(r.machine_num);
+    const driver=escapeHTML(r.driver);
+    const route=escapeHTML(r.route);
+    const date=escapeHTML(String(r.date||"").slice(0,10));
+    const id=escapeHTML(r.id);
+
+    return `
+      <tr class="${rc}" style="border-bottom:1px solid rgba(255,255,255,.03)">
+        <td style="padding:.65rem .9rem;font-weight:900;cursor:pointer;color:#818cf8" onclick="abrirHistorial('${maq}')" title="Ver historial">${maq}</td>
+        <td style="padding:.65rem .9rem;color:#cbd5e1">${driver}</td>
+        <td style="padding:.65rem .9rem;color:#818cf8;white-space:nowrap">${route}</td>
+        <td style="padding:.65rem .9rem;text-align:right;font-family:monospace">${r.distance}</td>
+        <td style="padding:.65rem .9rem;text-align:right;font-family:monospace;color:#fbbf24;font-weight:700">${Number(deseados).toFixed(2)}</td>
+        <td style="padding:.65rem .9rem;text-align:right;font-family:monospace">${r.fuel}</td>
+        <td style="padding:.65rem .9rem;text-align:right;font-family:monospace;font-weight:900;color:${dc}">${(diferencia>0?"+":"")+Number(diferencia).toFixed(2)}</td>
+        <td style="padding:.65rem .9rem;text-align:center">${bdg}</td>
+        <td style="padding:.65rem .9rem;color:#475569;white-space:nowrap">${date}</td>
+        <td style="padding:.65rem .9rem;text-align:center">
+          <div style="display:flex;gap:.3rem;justify-content:center">
+            <button onclick="abrirModal('${id}')" style="width:28px;height:28px;border-radius:.5rem;border:none;background:rgba(99,102,241,.1);color:#818cf8;cursor:pointer;font-size:.85rem">✎</button>
+            <button onclick="pedirDel('${id}')" style="width:28px;height:28px;border-radius:.5rem;border:none;background:rgba(239,68,68,.08);color:#f87171;cursor:pointer;font-size:.85rem">🗑</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  if(cnt){
+    cnt.textContent=`Mostrando ${startIdx+1}–${endIdx} de ${total} • Página ${currentPage}/${totalPages}`;
+  }
+
+  if(pag && info && btns){
+    if(totalPages<=1){
+      pag.style.display='none';
+    }else{
+      pag.style.display='flex';
+      info.textContent=`Filas por página: ${rowsPerPage}`;
+      btns.innerHTML=buildPageButtons(totalPages);
+    }
+  }
 }
 
 // ── CHARTS ──
